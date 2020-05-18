@@ -28,9 +28,9 @@ public:
       return -EEXIST;
     }
     // if the rados.Rados instance was shutdown by Cython code, then the
-    // underlying RadosClient instance was deleted when we are still in
-    // "connected" state, so always remember to shutdown xRados instance
-    // before rados.Rados instance
+    // underlying RadosClient instance should has been deleted while we
+    // are still in the "connected" state, so always remember to shutdown
+    // xRados instance before rados.Rados instance
     auto* ptr = h_rados.ptr();
     auto* c_rados = reinterpret_cast<rados_t*>(PyCapsule_GetPointer(ptr, nullptr));
     Rados::from_rados_t(c_rados, *this);
