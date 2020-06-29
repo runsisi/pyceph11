@@ -1,17 +1,26 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 #include <pybind11/stl_bind.h>
+#include <pybind11/operators.h>
 
 #include "../rados/librados.hpp"
 #include "../rbd/librbdx.hpp"
 
 #include <list>
 #include <map>
+#include <memory>
 #include <set>
 #include <string>
 #include <type_traits>
 
 #include "nlohmann/json.hpp"
+
+namespace {
+
+// it is defined as uint64_t in ceph C++ code
+constexpr int64_t CEPH_NOSNAP = ((int64_t)(-2));
+
+}
 
 namespace py = pybind11;
 
@@ -156,7 +165,7 @@ json json_fmt(const parent_t& o) {
   j["pool_id"] = json_fmt(o.pool_id);
   j["pool_namespace"] = json_fmt(o.pool_namespace);
   j["image_id"] = json_fmt(o.image_id);
-  j["snap_id"] = json_fmt(o.snap_id);
+  j["snap_id"] = json_fmt((int64_t)o.snap_id);
   return std::move(j);
 }
 
@@ -170,8 +179,8 @@ json json_fmt(const child_t& o) {
 
 json json_fmt(const snap_info_t& o) {
   json j = json::object({});
-  j["id"] = json_fmt(o.id);
   j["name"] = json_fmt(o.name);
+  j["id"] = json_fmt(o.id);
   j["snap_type"] = json_fmt(o.snap_type);
   j["size"] = json_fmt(o.size);
   j["flags"] = json_fmt(o.flags);
@@ -185,8 +194,8 @@ json json_fmt(const snap_info_t& o) {
 
 json json_fmt(const image_info_t& o) {
   json j = json::object({});
-  j["id"] = json_fmt(o.id);
   j["name"] = json_fmt(o.name);
+  j["id"] = json_fmt(o.id);
   j["order"] = json_fmt(o.order);
   j["size"] = json_fmt(o.size);
   j["features"] = json_fmt(o.features);
@@ -201,6 +210,7 @@ json json_fmt(const image_info_t& o) {
   j["watchers"] = json_fmt(o.watchers);
   j["metas"] = json_fmt(o.metas);
   j["du"] = json_fmt(o.du);
+  j["dirty"] = json_fmt(o.dirty);
   return std::move(j);
 }
 
@@ -208,12 +218,15 @@ json json_fmt(const image_info_t& o) {
 
 namespace rbdx {
 
+using namespace librados;
 using namespace librbdx;
 using json = nlohmann::json;
 
 constexpr int json_indent = 4;
 
 PYBIND11_MODULE(rbdx, m) {
+
+  m.attr("CEPH_NOSNAP") = py::int_(CEPH_NOSNAP);
 
   {
     auto b = py::bind_map<Map_string_2_pair_image_info_t_int>(m, "Map_string_2_pair_image_info_t_int");
@@ -223,20 +236,33 @@ PYBIND11_MODULE(rbdx, m) {
   }
 
   {
-    py::enum_<snap_type_t> kind(m, "snap_type_t", py::arithmetic());
-    kind.value("SNAPSHOT_NAMESPACE_TYPE_USER", snap_type_t::SNAPSHOT_NAMESPACE_TYPE_USER);
-    kind.value("SNAPSHOT_NAMESPACE_TYPE_GROUP", snap_type_t::SNAPSHOT_NAMESPACE_TYPE_GROUP);
-    kind.value("SNAPSHOT_NAMESPACE_TYPE_TRASH", snap_type_t::SNAPSHOT_NAMESPACE_TYPE_TRASH);
-    kind.export_values();
+    py::enum_<info_filter_t> e(m, "info_filter_t", py::arithmetic());
+    e.value("INFO_F_CHILDREN_V1", info_filter_t::INFO_F_CHILDREN_V1);
+    e.value("INFO_F_IMAGE_DU", info_filter_t::INFO_F_IMAGE_DU);
+    e.value("INFO_F_SNAP_DU", info_filter_t::INFO_F_SNAP_DU);
+    e.value("INFO_F_ALL", info_filter_t::INFO_F_ALL);
+    e.def(py::self & py::self);
+    e.def(py::self | py::self);
+    e.def(py::self &= py::self);
+    e.def(py::self |= py::self);
+    e.export_values();
   }
 
   {
-    py::enum_<snap_protection_status_t> kind(m, "snap_protection_status_t", py::arithmetic());
-    kind.value("PROTECTION_STATUS_UNPROTECTED", snap_protection_status_t::PROTECTION_STATUS_UNPROTECTED);
-    kind.value("PROTECTION_STATUS_UNPROTECTING", snap_protection_status_t::PROTECTION_STATUS_UNPROTECTING);
-    kind.value("PROTECTION_STATUS_PROTECTED", snap_protection_status_t::PROTECTION_STATUS_PROTECTED);
-    kind.value("PROTECTION_STATUS_LAST", snap_protection_status_t::PROTECTION_STATUS_LAST);
-    kind.export_values();
+    py::enum_<snap_type_t> e(m, "snap_type_t", py::arithmetic());
+    e.value("SNAPSHOT_NAMESPACE_TYPE_USER", snap_type_t::SNAPSHOT_NAMESPACE_TYPE_USER);
+    e.value("SNAPSHOT_NAMESPACE_TYPE_GROUP", snap_type_t::SNAPSHOT_NAMESPACE_TYPE_GROUP);
+    e.value("SNAPSHOT_NAMESPACE_TYPE_TRASH", snap_type_t::SNAPSHOT_NAMESPACE_TYPE_TRASH);
+    e.export_values();
+  }
+
+  {
+    py::enum_<snap_protection_status_t> e(m, "snap_protection_status_t", py::arithmetic());
+    e.value("PROTECTION_STATUS_UNPROTECTED", snap_protection_status_t::PROTECTION_STATUS_UNPROTECTED);
+    e.value("PROTECTION_STATUS_UNPROTECTING", snap_protection_status_t::PROTECTION_STATUS_UNPROTECTING);
+    e.value("PROTECTION_STATUS_PROTECTED", snap_protection_status_t::PROTECTION_STATUS_PROTECTED);
+    e.value("PROTECTION_STATUS_LAST", snap_protection_status_t::PROTECTION_STATUS_LAST);
+    e.export_values();
   }
 
   {
@@ -245,7 +271,9 @@ PYBIND11_MODULE(rbdx, m) {
     cls.def_readonly("pool_id", &parent_t::pool_id);
     cls.def_readonly("pool_namespace", &parent_t::pool_namespace);
     cls.def_readonly("image_id", &parent_t::image_id);
-    cls.def_readonly("snap_id", &parent_t::snap_id);
+    cls.def_property_readonly("snap_id", [](const parent_t& self) -> int64_t {
+      return (int64_t)self.snap_id;
+    }, py::return_value_policy::copy);
     cls.def("__repr__", [](const parent_t& self) {
       return json_fmt(self).dump(json_indent);
     });
@@ -255,6 +283,7 @@ PYBIND11_MODULE(rbdx, m) {
     py::class_<child_t> cls(m, "child_t");
     cls.def(py::init<>());
     cls.def_readonly("pool_id", &child_t::pool_id);
+    cls.def_readonly("pool_namespace", &child_t::pool_namespace);
     cls.def_readonly("image_id", &child_t::image_id);
     cls.def("__repr__", [](const child_t& self) {
       return json_fmt(self).dump(json_indent);
@@ -264,13 +293,14 @@ PYBIND11_MODULE(rbdx, m) {
   {
     py::class_<snap_info_t> cls(m, "snap_info_t");
     cls.def(py::init<>());
-    cls.def_readonly("id", &snap_info_t::id);
     cls.def_readonly("name", &snap_info_t::name);
+    cls.def_readonly("id", &snap_info_t::id);
     cls.def_readonly("snap_type", &snap_info_t::snap_type);
     cls.def_readonly("size", &snap_info_t::size);
     cls.def_readonly("flags", &snap_info_t::flags);
     cls.def_readonly("protection_status", &snap_info_t::protection_status);
     cls.def_readonly("timestamp", &snap_info_t::timestamp);
+    cls.def_readonly("children", &snap_info_t::children);
     cls.def_readonly("du", &snap_info_t::du);
     cls.def_readonly("dirty", &snap_info_t::dirty);
     cls.def("__repr__", [](const snap_info_t& self) {
@@ -281,11 +311,12 @@ PYBIND11_MODULE(rbdx, m) {
   {
     py::class_<image_info_t> cls(m, "image_info_t");
     cls.def(py::init<>());
-    cls.def_readonly("id", &image_info_t::id);
     cls.def_readonly("name", &image_info_t::name);
+    cls.def_readonly("id", &image_info_t::id);
     cls.def_readonly("order", &image_info_t::order);
     cls.def_readonly("size", &image_info_t::size);
     cls.def_readonly("features", &image_info_t::features);
+    cls.def_readonly("op_features", &image_info_t::op_features);
     cls.def_readonly("flags", &image_info_t::flags);
     cls.def_readonly("snaps", &image_info_t::snaps);
     cls.def_readonly("parent", &image_info_t::parent);
@@ -296,6 +327,7 @@ PYBIND11_MODULE(rbdx, m) {
     cls.def_readonly("watchers", &image_info_t::watchers);
     cls.def_readonly("metas", &image_info_t::metas);
     cls.def_readonly("du", &image_info_t::du);
+    cls.def_readonly("dirty", &image_info_t::dirty);
     cls.def("__repr__", [](const image_info_t& self) {
       return json_fmt(self).dump(json_indent);
     });
@@ -305,25 +337,52 @@ PYBIND11_MODULE(rbdx, m) {
   // xRBD
   //
   {
-    using list_info_func_t_1 = int (xRBD::*)(librados::IoCtx&,
-        std::map<std::string, std::pair<image_info_t, int>>*);
-    using list_info_func_t_2 = int (xRBD::*)(librados::IoCtx&,
-        const std::map<std::string, std::string>&,
-        std::map<std::string, std::pair<image_info_t, int>>*);
+    m.def("get_info",
+        [](librados::IoCtx& ioctx,
+            const std::string& image_name,
+            const std::string& image_id,
+            uint64_t flags) {
+          image_info_t info;
+          int r = get_info(ioctx, image_name, image_id, &info, flags);
+          return std::make_pair(info, r);
+        },
+        py::call_guard<py::gil_scoped_release>(),
+        py::arg("ioctx"),
+        py::arg("image_name"),
+        py::arg("image_id"),
+        py::arg("flags") = 0);
 
-    py::class_<xRBD> cls(m, "xRBD");
-    cls.def(py::init<>());
-
-    cls.def("get_info", &xRBD::get_info,
+    m.def("list",
+        [](librados::IoCtx& ioctx) {
+          std::map<std::string, std::string> images;
+          int r = list(ioctx, &images);
+          return std::make_pair(images, r);
+        },
         py::call_guard<py::gil_scoped_release>());
 
-    cls.def("list", &xRBD::list,
-        py::call_guard<py::gil_scoped_release>());
+    m.def("list_info",
+        [](librados::IoCtx& ioctx, uint64_t flags) {
+          using T = Map_string_2_pair_image_info_t_int;
+          auto infos = std::unique_ptr<T>(new Map_string_2_pair_image_info_t_int{});
+          int r = list_info(ioctx, infos.get(), flags);
+          return std::make_pair(std::move(infos), r);
+        },
+        py::call_guard<py::gil_scoped_release>(),
+        py::arg("ioctx"),
+        py::arg("flags") = 0);
 
-    cls.def("list_info", (list_info_func_t_1)&xRBD::list_info,
-        py::call_guard<py::gil_scoped_release>());
-    cls.def("list_info", (list_info_func_t_2)&xRBD::list_info,
-        py::call_guard<py::gil_scoped_release>());
+    m.def("list_info",
+        [](librados::IoCtx& ioctx, const std::map<std::string, std::string>& images, // <id, name>
+            uint64_t flags) {
+          using T = Map_string_2_pair_image_info_t_int;
+          auto infos = std::unique_ptr<T>(new Map_string_2_pair_image_info_t_int{});
+          int r = list_info(ioctx, images, infos.get(), flags);
+          return std::make_pair(std::move(infos), r);
+        },
+        py::call_guard<py::gil_scoped_release>(),
+        py::arg("ioctx"),
+        py::arg("images"),
+        py::arg("flags") = 0);
   }
 
 } // PYBIND11_MODULE(rbdx, m)

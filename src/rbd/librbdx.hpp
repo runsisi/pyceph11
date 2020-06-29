@@ -19,7 +19,52 @@
 
 namespace librbdx {
 
-enum class snap_type_t {
+template<typename E> struct Enable : std::false_type { };
+
+template<typename E>
+typename std::enable_if<Enable<typename std::decay<E>::type>::value, E>::type
+operator&(E lhs, E rhs) {
+  using T = typename std::underlying_type<E>::type;
+  return static_cast<E>(static_cast<T>(lhs) & static_cast<T>(rhs));
+}
+
+template<typename E>
+typename std::enable_if<Enable<typename std::decay<E>::type>::value, E>::type
+operator|(E lhs, E rhs) {
+  using T = typename std::underlying_type<E>::type;
+  return static_cast<E>(static_cast<T>(lhs) | static_cast<T>(rhs));
+}
+
+template<typename E>
+typename std::enable_if<Enable<typename std::decay<E>::type>::value, E>::type&
+operator&=(E& lhs, E rhs) {
+  using T = typename std::underlying_type<E>::type;
+  lhs = static_cast<E>(static_cast<T>(lhs) & static_cast<T>(rhs));
+  return lhs;
+}
+
+template<typename E>
+typename std::enable_if<Enable<typename std::decay<E>::type>::value, E>::type&
+operator|=(E& lhs, E rhs) {
+  using T = typename std::underlying_type<E>::type;
+  lhs = static_cast<E>(static_cast<T>(lhs) | static_cast<T>(rhs));
+  return lhs;
+}
+
+}
+
+namespace librbdx {
+
+enum class info_filter_t : uint64_t {
+  INFO_F_CHILDREN_V1    = 1ULL << 0,
+  INFO_F_IMAGE_DU       = 1ULL << 1,
+  INFO_F_SNAP_DU        = 1ULL << 2,
+  INFO_F_ALL            = INFO_F_CHILDREN_V1 | INFO_F_IMAGE_DU | INFO_F_SNAP_DU
+};
+
+template<> struct Enable<librbdx::info_filter_t> : std::true_type { };
+
+enum class snap_type_t : uint32_t {
   SNAPSHOT_NAMESPACE_TYPE_USER = 0,
   SNAPSHOT_NAMESPACE_TYPE_GROUP = 1,
   SNAPSHOT_NAMESPACE_TYPE_TRASH = 2
@@ -82,8 +127,8 @@ struct child_t {
 };
 
 struct snap_info_t {
-  uint64_t id;
   std::string name;
+  uint64_t id;
   snap_type_t snap_type;
   uint64_t size;
   uint64_t flags;
@@ -96,8 +141,8 @@ struct snap_info_t {
 };
 
 struct image_info_t {
-  std::string id;
   std::string name;
+  std::string id;
   uint8_t order;
   uint64_t size;
   uint64_t features;
@@ -112,25 +157,25 @@ struct image_info_t {
   std::vector<std::string> watchers;
   std::map<std::string, std::string> metas;
   int64_t du;
+  int64_t dirty;
 };
 
-class CEPH_RBD_API xRBD {
-public:
-  //
-  // xImage
-  //
-  int get_info(librados::IoCtx& ioctx,
-      const std::string& image_id, image_info_t* info);
+CEPH_RBD_API int get_info(librados::IoCtx& ioctx,
+    const std::string& image_name,
+    const std::string& image_id,
+    image_info_t* info,
+    uint64_t flags = 0);
 
-  int list(librados::IoCtx& ioctx,
-      std::map<std::string, std::string>* images);
+CEPH_RBD_API int list(librados::IoCtx& ioctx,
+    std::map<std::string, std::string>* images);
 
-  int list_info(librados::IoCtx& ioctx,
-      std::map<std::string, std::pair<image_info_t, int>>* infos);
-  int list_info(librados::IoCtx& ioctx,
-      const std::map<std::string, std::string>& images,
-      std::map<std::string, std::pair<image_info_t, int>>* infos);
-};
+CEPH_RBD_API int list_info(librados::IoCtx& ioctx,
+    std::map<std::string, std::pair<image_info_t, int>>* infos,
+    uint64_t flags = 0);
+CEPH_RBD_API int list_info(librados::IoCtx& ioctx,
+    const std::map<std::string, std::string>& images, // <id, name>
+    std::map<std::string, std::pair<image_info_t, int>>* infos,
+    uint64_t flags = 0);
 
 }
 

@@ -32,7 +32,7 @@ public:
     // are still in the "connected" state, so always remember to shutdown
     // xRados instance before rados.Rados instance
     auto* ptr = h_rados.ptr();
-    auto* c_rados = reinterpret_cast<rados_t*>(PyCapsule_GetPointer(ptr, nullptr));
+    auto* c_rados = reinterpret_cast<rados_t*>(PyCapsule_GetPointer(ptr, "rados"));
     Rados::from_rados_t(c_rados, *this);
     state = "connected";
     return 0;
@@ -155,7 +155,7 @@ PYBIND11_MODULE(radosx, m) {
     cls.def("init2", &xRados::init2);
     cls.def("init_with_context", [](xRados& self, py::handle h_rados_cct) {
       auto* ptr = h_rados_cct.ptr();
-      auto* c_cct = reinterpret_cast<config_t*>(PyCapsule_GetPointer(ptr, nullptr));
+      auto* c_cct = reinterpret_cast<config_t*>(PyCapsule_GetPointer(ptr, "rados"));
       return self.init_with_context(c_cct);
     });
     cls.def("cct", [](xRados& self) {
@@ -179,7 +179,7 @@ PYBIND11_MODULE(radosx, m) {
     cls.def(py::init<>());
     cls.def(py::init([](py::handle h_rados_ioctx) {
       auto* ptr = h_rados_ioctx.ptr();
-      auto* c_ioctx = reinterpret_cast<rados_ioctx_t*>(PyCapsule_GetPointer(ptr, nullptr));
+      auto* c_ioctx = reinterpret_cast<rados_ioctx_t*>(PyCapsule_GetPointer(ptr, "ioctx"));
       auto ioctx = new IoCtx{};
       IoCtx::from_rados_ioctx_t(c_ioctx, *ioctx);
       return std::unique_ptr<IoCtx>{ioctx};
@@ -195,7 +195,7 @@ PYBIND11_MODULE(radosx, m) {
         return -EEXIST;
       }
       auto* ptr = h_rados_ioctx.ptr();
-      auto* c_ioctx = reinterpret_cast<rados_ioctx_t*>(PyCapsule_GetPointer(ptr, nullptr));
+      auto* c_ioctx = reinterpret_cast<rados_ioctx_t*>(PyCapsule_GetPointer(ptr, "ioctx"));
       IoCtx::from_rados_ioctx_t(c_ioctx, self);
       return 0;
     });
