@@ -43,7 +43,7 @@ ext_modules = [
                 'single_include'
             ),
         ],
-        libraries=['rbd', 'rados'],
+        # libraries=['rbd', 'rados'],
         language='c++'
     ),
 ]

@@ -37,7 +37,7 @@ ext_modules = [
             get_pybind_include(),
             # get_pybind_include(user=True),
         ],
-        libraries=['rados'],
+        # libraries=['rados'],
         language='c++'
     ),
 ]
