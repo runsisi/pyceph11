@@ -1,10 +1,12 @@
 cmake_minimum_required(VERSION 3.5.1)
 
+project(pyceph11)
+
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/modules")
 
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
-option(WITH_PYTHON2 "build python2 bindings" ON)
+option(WITH_PYTHON2 "build python2 bindings" OFF)
 if(WITH_PYTHON2)
   find_package(Python2Interp 2 REQUIRED)
   find_package(Python2Libs ${PYTHON2_VERSION_STRING} EXACT REQUIRED)
@@ -38,7 +40,7 @@ foreach(python_version ${py_vers})
     set(PYTHON_VERSION ${python_version})
   endif(${python_version} EQUAL 2)
 
-  find_package(Cython REQUIRED)
+  find_package(Cython${PYTHON_VERSION} REQUIRED)
 
   add_subdirectory(src/radosx radosx${PYTHON_VERSION})
   add_subdirectory(src/rbdx rbdx${PYTHON_VERSION})
