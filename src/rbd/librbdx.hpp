@@ -164,18 +164,18 @@ CEPH_RBD_API int get_info(librados::IoCtx& ioctx,
     const std::string& image_name,
     const std::string& image_id,
     image_info_t* info,
-    uint64_t flags = 0);
+    uint64_t flags = 0) {}
 
 CEPH_RBD_API int list(librados::IoCtx& ioctx,
-    std::map<std::string, std::string>* images);
+    std::map<std::string, std::string>* images) {}
 
 CEPH_RBD_API int list_info(librados::IoCtx& ioctx,
     std::map<std::string, std::pair<image_info_t, int>>* infos,
-    uint64_t flags = 0);
+    uint64_t flags = 0) {}
 CEPH_RBD_API int list_info(librados::IoCtx& ioctx,
     const std::map<std::string, std::string>& images, // <id, name>
     std::map<std::string, std::pair<image_info_t, int>>* infos,
-    uint64_t flags = 0);
+    uint64_t flags = 0) {}
 
 }
 
